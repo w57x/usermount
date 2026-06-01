@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: InterVariable, Inter, ui-sans-serif, system-ui, sans-serif;
+
+  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:root {
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
+  font-variant-ligatures: common-ligatures;
+  font-synthesis: style;
+  text-rendering: optimizeLegibility;
+}

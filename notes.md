@@ -1,0 +1,3 @@
+- "net/smtp"
+- "github.com/jackc/pgx/v5"
+- "golang.org/x/crypto/argon2"

@@ -9,12 +9,29 @@ templ Layout(title string) {
 			<title>{ title }</title>
 			<link rel="stylesheet" href="/css/style.css"/>
 			<link rel="preconnect" href="https://rsms.me/"/>
-			<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
 		</head>
-		<body>
-			<main>
+		<body class="bg-[#fafafa] text-zinc-900 antialiased min-h-screen flex items-center justify-center p-4">
+			<main class="w-full max-w-sm">
 				{ children... }
 			</main>
+		</body>
+	</html>
+}
+
+templ AdminLayout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/css/style.css"/>
+			<link rel="preconnect" href="https://rsms.me/"/>
+			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
+		</head>
+		<body class="bg-[#fafafa] text-zinc-900 antialiased min-h-screen flex flex-col">
+			{ children... }
 		</body>
 	</html>
 }

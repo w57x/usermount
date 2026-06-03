@@ -1,0 +1,9 @@
+domain: "" # MUST BE SPECIFIED, otherwise app will crash on launch
+name: "Usermount"
+port: "3000"
+db_path: "./usermount.db"
+smtp_host: "127.0.0.1"
+smtp_port: "25"
+from_email: "noreply@localhost"
+script_path: "./create_user.sh"
+jwt_secret: "super-secret-key-change-me"

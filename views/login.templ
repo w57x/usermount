@@ -1,0 +1,36 @@
+package views
+
+templ Login(errorMsg string) {
+	@Layout("Login") {
+		<div class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+			<div class="flex justify-center">
+				<img src="/assets/usermount.svg" alt="usermount logo"/>
+			</div>
+			<div class="card p-6 bg-white space-y-4">
+				<div class="space-y-1 text-center">
+					<h1 class="text-xl font-semibold tracking-tight text-zinc-900">Sign in to Usermount</h1>
+					<p class="text-xs text-zinc-400 font-normal">Enter your credentials to manage your account</p>
+				</div>
+				if errorMsg != "" {
+					<div class="bg-red-50 text-red-700 border border-red-200/60 text-xs p-2.5 rounded-md text-center">
+						{ errorMsg }
+					</div>
+				}
+				<form action="/api/login" method="POST" class="space-y-3">
+					<div class="space-y-1">
+						<label for="username" class="text-xs font-medium text-zinc-500">Username</label>
+						<input type="text" id="username" name="username" required class="input-pure text-sm" placeholder="username"/>
+					</div>
+					<div class="space-y-1">
+						<label for="password" class="text-xs font-medium text-zinc-500">Password</label>
+						<input type="password" id="password" name="password" required class="input-pure text-sm" placeholder="••••••••"/>
+					</div>
+					<button type="submit" class="btn-pure w-full mt-2 text-xs font-semibold">Sign In</button>
+				</form>
+			</div>
+			<div class="text-center">
+				<a href="/activate" class="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">Have an activation code?</a>
+			</div>
+		</div>
+	}
+}

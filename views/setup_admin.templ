@@ -1,0 +1,33 @@
+package views
+
+templ SetupAdmin(errorMsg string) {
+	@Layout("Setup Admin") {
+		<div class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+			<div class="flex justify-center">
+				<img src="/assets/usermount.svg" alt="usermount logo"/>
+			</div>
+			<div class="card p-6 bg-white space-y-4">
+				<div class="space-y-1 text-center">
+					<h1 class="text-xl font-semibold tracking-tight text-zinc-900">Configure Administrator</h1>
+					<p class="text-xs text-zinc-400 font-normal">First launch setup: Create the master admin account</p>
+				</div>
+				if errorMsg != "" {
+					<div class="bg-red-50 text-red-700 border border-red-200/60 text-xs p-2.5 rounded-md text-center">
+						{ errorMsg }
+					</div>
+				}
+				<form action="/api/setup-admin" method="POST" class="space-y-3">
+					<div class="space-y-1">
+						<label for="username" class="text-xs font-medium text-zinc-500">Admin Username</label>
+						<input type="text" id="username" name="username" required class="input-pure text-sm" placeholder="admin"/>
+					</div>
+					<div class="space-y-1">
+						<label for="password" class="text-xs font-medium text-zinc-500">Admin Password</label>
+						<input type="password" id="password" name="password" required minlength="8" class="input-pure text-sm" placeholder="••••••••"/>
+					</div>
+					<button type="submit" class="btn-pure w-full mt-2 text-xs font-semibold">Initialize Platform</button>
+				</form>
+			</div>
+		</div>
+	}
+}

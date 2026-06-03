@@ -1,0 +1,149 @@
+package views
+
+type UserRow struct {
+	Username  string
+	Role      string
+	CreatedAt string
+}
+
+templ AdminDashboard(adminUser string, adminRole string, initialUsers []UserRow) {
+	@AdminLayout("Admin Dashboard") {
+		<header class="sticky top-0 z-40 w-full border-b border-zinc-200/80 bg-white/80 backdrop-blur-md">
+			<div class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+				<div class="flex items-center gap-3">
+					<div class="h-7 w-7 rounded-full bg-zinc-950 text-white flex items-center justify-center font-semibold text-xs tracking-wider">
+						if len(adminUser) > 0 {
+							{ string(adminUser[0]) }
+						}
+					</div>
+					<div class="flex items-center gap-2">
+						<span class="text-sm font-medium text-zinc-900">{ adminUser }</span>
+						<span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-zinc-100 text-zinc-800 border border-zinc-200 capitalize">
+							{ adminRole }
+						</span>
+					</div>
+				</div>
+				<div class="flex items-center gap-4">
+					<a href="/logout" class="btn-pure-outline h-8! px-2.5! text-xs! flex items-center gap-1.5 text-zinc-600 hover:text-zinc-900">
+						@Lucide("log-out", "h-3.5 w-3.5")
+						Sign Out
+					</a>
+				</div>
+			</div>
+		</header>
+		<main class="max-w-5xl w-full mx-auto px-6 py-10 flex-1 flex flex-col md:flex-row gap-8">
+			<div class="w-full md:w-80 shrink-0 space-y-6">
+				<div class="card p-6 bg-white space-y-4">
+					<div class="space-y-1">
+						<h3 class="text-base font-semibold text-zinc-900 flex items-center gap-2">
+							@Lucide("mail", "h-4 w-4 text-zinc-500")
+							Invite User
+						</h3>
+						<p class="text-xs text-zinc-500 font-normal">Generate and send an activation code for a new user.</p>
+					</div>
+					<form hx-post="/api/admin/invite" hx-target="#invite-result" class="space-y-4" hx-on::after-request="if(event.detail.successful) this.reset();">
+						<div class="space-y-1.5">
+							<label for="email" class="text-xs font-medium text-zinc-600">Email Address</label>
+							<input type="email" id="email" name="email" required class="input-pure text-sm" placeholder="user@example.com"/>
+						</div>
+						<button type="submit" class="btn-pure w-full text-xs font-semibold">Send Invite</button>
+					</form>
+					<div id="invite-result" class="mt-2"></div>
+				</div>
+			</div>
+			<div class="flex-1">
+				<div class="card p-6 bg-white space-y-6">
+					<div class="flex justify-between items-center">
+						<div class="space-y-1">
+							<h3 class="text-base font-semibold text-zinc-900 flex items-center gap-2">
+								@Lucide("users", "h-4 w-4 text-zinc-500")
+								Users
+							</h3>
+							<p class="text-xs text-zinc-500 font-normal">Manage current system accounts and access configurations.</p>
+						</div>
+						<button hx-get="/api/admin/users-list" hx-target="#user-list" class="btn-pure-outline h-8! px-2.5! text-xs! flex items-center gap-1.5">
+							@Lucide("refresh-cw", "h-3 w-3")
+							Refresh
+						</button>
+					</div>
+					<div class="border border-zinc-200/80 rounded-lg overflow-hidden bg-white">
+						<table class="w-full text-sm text-left border-collapse">
+							<thead>
+								<tr class="bg-zinc-50 border-b border-zinc-200/80 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+									<th class="py-3 px-4">User</th>
+									<th class="py-3 px-4">Role</th>
+									<th class="py-3 px-4 text-right">Created At</th>
+								</tr>
+							</thead>
+							<tbody id="user-list" class="divide-y divide-zinc-100" hx-get="/api/admin/users-list" hx-trigger="invite-sent from:body" hx-target="this">
+								@UserList(initialUsers)
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+templ UserList(users []UserRow) {
+	if len(users) == 0 {
+		<tr>
+			<td colspan="3" class="py-8 text-center text-xs text-zinc-400 font-medium">No system accounts found.</td>
+		</tr>
+	} else {
+		for _, u := range users {
+			<tr class="hover:bg-zinc-50/40 transition-colors duration-150">
+				<td class="py-3 px-4">
+					<div class="flex items-center gap-2.5">
+						<div class="h-6 w-6 rounded-full bg-zinc-100 flex items-center justify-center">
+							@Lucide("user", "h-3.5 w-3.5 text-zinc-500")
+						</div>
+						<span class="font-medium text-zinc-950 text-sm">{ u.Username }</span>
+					</div>
+				</td>
+				<td class="py-3 px-4">
+					<span
+						class={ "inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border capitalize " + 
+						ternary(u.Role == "admin", "bg-zinc-900 text-zinc-50 border-transparent", "bg-zinc-50 text-zinc-700 border-zinc-200") }
+					>
+						{ u.Role }
+					</span>
+				</td>
+				<td class="py-3 px-4 text-right text-xs text-zinc-400 tabular-nums">{ u.CreatedAt }</td>
+			</tr>
+		}
+	}
+}
+
+templ InviteSuccess(code string) {
+	<div class="p-3 bg-zinc-900 border border-zinc-800 text-zinc-50 rounded-lg text-xs space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+		<div class="flex items-center gap-1.5 text-emerald-400 font-medium">
+			@Lucide("check-circle", "h-3.5 w-3.5")
+			Code Generated!
+		</div>
+		<p class="text-[10px] text-zinc-400">Invite email has been dispatched via Postfix.</p>
+		<div class="flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded p-1.5 font-mono select-all text-zinc-100 text-[10px] tracking-wider uppercase font-semibold">
+			{ code }
+		</div>
+	</div>
+}
+
+templ InviteError(msg string) {
+	<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+		<div class="shrink-0 mt-0.5 text-red-500">
+			@Lucide("alert-triangle", "h-3.5 w-3.5")
+		</div>
+		<div class="space-y-0.5">
+			<p class="font-medium">Invite Failed</p>
+			<p class="text-[10px] text-red-600">{ msg }</p>
+		</div>
+	</div>
+}
+
+func ternary(cond bool, t, f string) string {
+	if cond {
+		return t
+	}
+	return f
+}

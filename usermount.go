@@ -250,7 +250,7 @@ func main() {
 		}
 
 		w.Header().Set("HX-Trigger", "invite-sent")
-		views.InviteSuccess(code).Render(r.Context(), w)
+		views.InviteSuccess().Render(r.Context(), w)
 	}))
 
 	// Activation routes

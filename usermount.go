@@ -51,7 +51,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func checkAdminExists(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/setup-admin" || r.URL.Path == "/api/setup-admin" || strings.HasPrefix(r.URL.Path, "/css/") {
+		if r.URL.Path == "/setup-admin" || r.URL.Path == "/api/setup-admin" || strings.HasPrefix(r.URL.Path, "/css/") || strings.HasPrefix(r.URL.Path, "/assets/") || r.URL.Path == "/favicon.ico" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -104,6 +104,10 @@ func main() {
 	}
 	mux.Handle("GET /css/", http.FileServer(http.FS(publicFS)))
 	mux.Handle("GET /assets/", http.FileServer(http.FS(publicFS)))
+	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = "/assets/favicon.ico"
+		http.FileServer(http.FS(publicFS)).ServeHTTP(w, r)
+	})
 
 	// First Launch Route
 	mux.HandleFunc("GET /setup-admin", func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/smtp"
 )
@@ -34,10 +35,41 @@ func sendActivationEmail(toEmail, code string) error {
 	msg := []byte(subject + mime + body)
 	addr := smtpHost + ":" + smtpPort
 
-	err := smtp.SendMail(addr, nil, fromEmail, []string{toEmail}, msg)
+	c, err := smtp.Dial(addr)
 	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
+		return fmt.Errorf("failed to connect to SMTP server: %w", err)
 	}
+	defer c.Close()
+
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		config := &tls.Config{
+			ServerName:         smtpHost,
+			InsecureSkipVerify: AppConfig.SMTPSkipVerify,
+		}
+		if err = c.StartTLS(config); err != nil {
+			return fmt.Errorf("failed to establish STARTTLS: %w", err)
+		}
+	}
+
+	if err = c.Mail(fromEmail); err != nil {
+		return fmt.Errorf("failed to set sender: %w", err)
+	}
+	if err = c.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("failed to set recipient: %w", err)
+	}
+	w, err := c.Data()
+	if err != nil {
+		return fmt.Errorf("failed to initiate data transfer: %w", err)
+	}
+	_, err = w.Write(msg)
+	if err != nil {
+		return fmt.Errorf("failed to write message body: %w", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close data writer: %w", err)
+	}
+	_ = c.Quit()
 
 	return nil
 }

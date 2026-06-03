@@ -8,15 +8,16 @@ import (
 )
 
 type Config struct {
-	Domain     string `yaml:"domain"`
-	Name       string `yaml:"name"`
-	Port       string `yaml:"port"`
-	DBPath     string `yaml:"db_path"`
-	SMTPHost   string `yaml:"smtp_host"`
-	SMTPPort   string `yaml:"smtp_port"`
-	FromEmail  string `yaml:"from_email"`
-	ScriptPath string `yaml:"script_path"`
-	JWTSecret  string `yaml:"jwt_secret"`
+	Domain         string `yaml:"domain"`
+	Name           string `yaml:"name"`
+	Port           string `yaml:"port"`
+	DBPath         string `yaml:"db_path"`
+	SMTPHost       string `yaml:"smtp_host"`
+	SMTPPort       string `yaml:"smtp_port"`
+	SMTPSkipVerify bool   `yaml:"smtp_skip_verify"`
+	FromEmail      string `yaml:"from_email"`
+	ScriptPath     string `yaml:"script_path"`
+	JWTSecret      string `yaml:"jwt_secret"`
 }
 
 var AppConfig Config

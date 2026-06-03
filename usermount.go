@@ -331,6 +331,14 @@ func main() {
 		err = createUser(normalizedUser, password)
 		if err != nil {
 			slog.Error("Script error", "err", err)
+			if delErr := deleteUser(normalizedUser); delErr != nil {
+				slog.Error("Failed to rollback user creation in DB", "err", delErr)
+			}
+			if invErr := markInviteAsUnused(code); invErr != nil {
+				slog.Error("Failed to rollback invite status in DB", "err", invErr)
+			}
+			views.Setup(code, "Failed to create system user: "+err.Error()).Render(r.Context(), w)
+			return
 		}
 
 		accessToken, refreshToken, _ := GenerateTokens(normalizedUser, "user")

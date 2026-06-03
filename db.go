@@ -148,3 +148,13 @@ func createUserDb(username, passwordHash, role string) error {
 	_, err := db.Exec("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", username, passwordHash, role)
 	return err
 }
+
+func deleteUser(username string) error {
+	_, err := db.Exec("DELETE FROM users WHERE username = ?", username)
+	return err
+}
+
+func markInviteAsUnused(code string) error {
+	_, err := db.Exec("UPDATE invites SET used = 0 WHERE code = ?", code)
+	return err
+}

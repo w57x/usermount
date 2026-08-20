@@ -83,3 +83,78 @@ func TestDbRollback(t *testing.T) {
 		t.Fatalf("expected invite to be unmarked (used=false)")
 	}
 }
+
+func TestInitialAdminAndUsers(t *testing.T) {
+	tmpDb := "./test_usermount_admin.db"
+	defer os.Remove(tmpDb)
+
+	AppConfig.DBPath = tmpDb
+	if err := initDB(); err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+	defer db.Close()
+
+	hasAdm, err := hasAdmin()
+	if err != nil || hasAdm {
+		t.Fatalf("expected no admin initially")
+	}
+
+	created, err := createInitialAdmin("firstadmin", "hash123")
+	if err != nil || !created {
+		t.Fatalf("expected initial admin to be created")
+	}
+
+	// Second attempt should fail atomically
+	created2, err := createInitialAdmin("secondadmin", "hash456")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created2 {
+		t.Fatalf("expected second initial admin creation to be rejected")
+	}
+
+	// Password update
+	err = updateUserPassword("firstadmin", "newhash789")
+	if err != nil {
+		t.Fatalf("failed to update password: %v", err)
+	}
+	user, err := getUser("firstadmin")
+	if err != nil || user == nil || user.PasswordHash != "newhash789" {
+		t.Fatalf("expected password hash to be updated")
+	}
+}
+
+func TestInviteManagement(t *testing.T) {
+	tmpDb := "./test_usermount_invites.db"
+	defer os.Remove(tmpDb)
+
+	AppConfig.DBPath = tmpDb
+	if err := initDB(); err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+	defer db.Close()
+
+	code1, err := createInvite("u1@example.com")
+	if err != nil {
+		t.Fatalf("failed to create invite 1: %v", err)
+	}
+	code2, err := createInvite("u2@example.com")
+	if err != nil {
+		t.Fatalf("failed to create invite 2: %v", err)
+	}
+
+	invites, err := listInvites()
+	if err != nil || len(invites) != 2 {
+		t.Fatalf("expected 2 invites, got %d", len(invites))
+	}
+
+	err = revokeInvite(code1)
+	if err != nil {
+		t.Fatalf("failed to revoke invite: %v", err)
+	}
+
+	invites, err = listInvites()
+	if err != nil || len(invites) != 1 || invites[0].Code != code2 {
+		t.Fatalf("expected 1 remaining invite (code2)")
+	}
+}

@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"usermount/views"
@@ -51,7 +56,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func checkAdminExists(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/setup-admin" || r.URL.Path == "/api/setup-admin" || strings.HasPrefix(r.URL.Path, "/css/") || strings.HasPrefix(r.URL.Path, "/assets/") || r.URL.Path == "/favicon.ico" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/livez" || r.URL.Path == "/setup-admin" || r.URL.Path == "/api/setup-admin" || strings.HasPrefix(r.URL.Path, "/css/") || strings.HasPrefix(r.URL.Path, "/assets/") || r.URL.Path == "/favicon.ico" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -109,6 +114,18 @@ func main() {
 		http.FileServer(http.FS(publicFS)).ServeHTTP(w, r)
 	})
 
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	authLimiter := NewIPRateLimiter(0.2, 5)    // 5 burst, 1 token every 5s
+	inviteLimiter := NewIPRateLimiter(0.5, 10) // 10 burst, 1 token every 2s
+
 	// First Launch Route
 	mux.HandleFunc("GET /setup-admin", func(w http.ResponseWriter, r *http.Request) {
 		adminExists, err := hasAdmin()
@@ -119,7 +136,7 @@ func main() {
 		views.SetupAdmin("").Render(r.Context(), w)
 	})
 
-	mux.HandleFunc("POST /api/setup-admin", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/setup-admin", RateLimitMiddleware(authLimiter, func(w http.ResponseWriter, r *http.Request) {
 		adminExists, err := hasAdmin()
 		if err == nil && adminExists {
 			http.Redirect(w, r, "/login", http.StatusFound)
@@ -140,14 +157,51 @@ func main() {
 			return
 		}
 
-		err = createUserDb(username, hash, "admin")
-		if err != nil {
+		created, err := createInitialAdmin(username, hash)
+		if err != nil || !created {
 			views.SetupAdmin("Failed to create admin").Render(r.Context(), w)
 			return
 		}
 
 		http.Redirect(w, r, "/login", http.StatusFound)
-	})
+	}))
+
+	getServicesViewData := func() []views.ServiceItem {
+		var list []views.ServiceItem
+		for key, s := range AppConfig.Services {
+			icon := s.Icon
+			if icon == "" {
+				switch strings.ToLower(key) {
+				case "mail", "mailbox", "email", "webmail":
+					icon = "mail"
+				case "git", "forgejo", "gitea", "github", "gitlab":
+					icon = "git-branch"
+				case "server", "vps", "ssh":
+					icon = "server"
+				default:
+					icon = "globe"
+				}
+			}
+			name := s.Name
+			if name == "" {
+				if len(key) > 0 {
+					name = strings.ToUpper(key[:1]) + key[1:]
+				} else {
+					name = "Service"
+				}
+			}
+			list = append(list, views.ServiceItem{
+				Key:  key,
+				Name: name,
+				Goto: s.Goto,
+				Icon: icon,
+			})
+		}
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].Name < list[j].Name
+		})
+		return list
+	}
 
 	// Routes
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +213,8 @@ func main() {
 					http.Redirect(w, r, "/admin", http.StatusFound)
 					return
 				}
-				views.Home(claims.Username).Render(r.Context(), w)
+				services := getServicesViewData()
+				views.Home(claims.Username, services).Render(r.Context(), w)
 				return
 			}
 		}
@@ -170,7 +225,7 @@ func main() {
 		views.Login("").Render(r.Context(), w)
 	})
 
-	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/login", RateLimitMiddleware(authLimiter, func(w http.ResponseWriter, r *http.Request) {
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
@@ -198,7 +253,7 @@ func main() {
 		} else {
 			http.Redirect(w, r, "/", http.StatusFound)
 		}
-	})
+	}))
 
 	mux.HandleFunc("GET /logout", func(w http.ResponseWriter, r *http.Request) {
 		ClearAuthCookies(w)
@@ -222,19 +277,84 @@ func main() {
 		return rows
 	}
 
+	getInvitesViewData := func() []views.InviteRow {
+		dbInvites, err := listInvites()
+		if err != nil {
+			return nil
+		}
+		var rows []views.InviteRow
+		for _, inv := range dbInvites {
+			isExpired := !inv.Used && time.Since(inv.CreatedAt) > 10*time.Minute
+			rows = append(rows, views.InviteRow{
+				ID:        inv.ID,
+				Code:      inv.Code,
+				Email:     inv.Email,
+				Used:      inv.Used,
+				CreatedAt: inv.CreatedAt.Format("2006-01-02 15:04"),
+				IsExpired: isExpired,
+			})
+		}
+		return rows
+	}
+
 	// Admin routes
 	mux.HandleFunc("GET /admin", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
 		claims := r.Context().Value(userContextKey).(*Claims)
-		rows := getUsersViewData()
-		views.AdminDashboard(claims.Username, claims.Role, rows).Render(r.Context(), w)
+		userRows := getUsersViewData()
+		inviteRows := getInvitesViewData()
+		views.AdminDashboard(claims.Username, claims.Role, userRows, inviteRows).Render(r.Context(), w)
 	}))
 
 	mux.HandleFunc("GET /api/admin/users-list", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value(userContextKey).(*Claims)
 		rows := getUsersViewData()
-		views.UserList(rows).Render(r.Context(), w)
+		views.UserList(rows, claims.Username).Render(r.Context(), w)
 	}))
 
-	mux.HandleFunc("POST /api/admin/invite", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/admin/users/delete", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value(userContextKey).(*Claims)
+		targetUsername := r.URL.Query().Get("username")
+		if targetUsername == "" || targetUsername == claims.Username {
+			http.Error(w, "Invalid user deletion request", http.StatusBadRequest)
+			return
+		}
+
+		targetUser, err := getUser(targetUsername)
+		if err != nil || targetUser == nil || targetUser.Role == "admin" {
+			http.Error(w, "Cannot delete admin or nonexistent user", http.StatusBadRequest)
+			return
+		}
+
+		if err := deleteUser(targetUsername); err != nil {
+			slog.Error("Failed to delete user in DB", "err", err)
+			http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+			return
+		}
+
+		if err := deleteUserSystem(targetUsername); err != nil {
+			slog.Error("Failed to execute user teardown script", "err", err)
+		}
+
+		w.Header().Set("HX-Trigger", "user-deleted")
+		rows := getUsersViewData()
+		views.UserList(rows, claims.Username).Render(r.Context(), w)
+	}))
+
+	mux.HandleFunc("GET /api/admin/invites-list", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+		rows := getInvitesViewData()
+		views.InviteList(rows).Render(r.Context(), w)
+	}))
+
+	mux.HandleFunc("POST /api/admin/invite/revoke", RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		if code != "" {
+			_ = revokeInvite(code)
+		}
+		rows := getInvitesViewData()
+		views.InviteList(rows).Render(r.Context(), w)
+	}))
+
+	mux.HandleFunc("POST /api/admin/invite", RateLimitMiddleware(inviteLimiter, RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
 		email := r.FormValue("email")
 		code, err := createInvite(email)
 		if err != nil {
@@ -251,14 +371,61 @@ func main() {
 
 		w.Header().Set("HX-Trigger", "invite-sent")
 		views.InviteSuccess().Render(r.Context(), w)
-	}))
+	})))
+
+	// User self-service routes
+	mux.HandleFunc("POST /api/user/change-password", RateLimitMiddleware(authLimiter, AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value(userContextKey).(*Claims)
+		currentPassword := r.FormValue("current_password")
+		newPassword := r.FormValue("new_password")
+
+		if len(newPassword) < 8 {
+			views.PasswordChangeError("New password must be at least 8 characters").Render(r.Context(), w)
+			return
+		}
+
+		user, err := getUser(claims.Username)
+		if err != nil || user == nil {
+			views.PasswordChangeError("User not found").Render(r.Context(), w)
+			return
+		}
+
+		ok, err := VerifyPassword(currentPassword, user.PasswordHash)
+		if err != nil || !ok {
+			views.PasswordChangeError("Current password is incorrect").Render(r.Context(), w)
+			return
+		}
+
+		newHash, err := HashPassword(newPassword)
+		if err != nil {
+			views.PasswordChangeError("Server error hashing password").Render(r.Context(), w)
+			return
+		}
+
+		if err := updateUserPassword(claims.Username, newHash); err != nil {
+			views.PasswordChangeError("Failed to update password in database").Render(r.Context(), w)
+			return
+		}
+
+		// Execute update password script
+		if err := updateUserPasswordSystem(claims.Username, newPassword); err != nil {
+			slog.Error("Password update script failed", "err", err)
+			if rbErr := updateUserPassword(claims.Username, user.PasswordHash); rbErr != nil {
+				slog.Error("Failed to rollback password in DB", "err", rbErr)
+			}
+			views.PasswordChangeError("Failed to update system password: "+err.Error()).Render(r.Context(), w)
+			return
+		}
+
+		views.PasswordChangeSuccess().Render(r.Context(), w)
+	})))
 
 	// Activation routes
 	mux.HandleFunc("GET /activate", func(w http.ResponseWriter, r *http.Request) {
 		views.Activate("").Render(r.Context(), w)
 	})
 
-	mux.HandleFunc("POST /api/activate", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/activate", RateLimitMiddleware(authLimiter, func(w http.ResponseWriter, r *http.Request) {
 		code := r.FormValue("code")
 		invite, err := getInviteByCode(code)
 		if err != nil || invite == nil || invite.Used {
@@ -266,7 +433,7 @@ func main() {
 			return
 		}
 		http.Redirect(w, r, "/setup?code="+code, http.StatusFound)
-	})
+	}))
 
 	mux.HandleFunc("GET /setup", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -278,7 +445,7 @@ func main() {
 		views.Setup(code, "").Render(r.Context(), w)
 	})
 
-	mux.HandleFunc("POST /api/setup", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/setup", RateLimitMiddleware(authLimiter, func(w http.ResponseWriter, r *http.Request) {
 		code := r.FormValue("code")
 		username := r.FormValue("username")
 		password := r.FormValue("password")
@@ -286,6 +453,11 @@ func main() {
 		invite, err := getInviteByCode(code)
 		if err != nil || invite == nil || invite.Used {
 			views.Setup(code, "Invalid or expired code").Render(r.Context(), w)
+			return
+		}
+
+		if len(password) < 8 {
+			views.Setup(code, "Password must be at least 8 characters").Render(r.Context(), w)
 			return
 		}
 
@@ -345,7 +517,7 @@ func main() {
 		SetAuthCookies(w, accessToken, refreshToken)
 
 		http.Redirect(w, r, "/", http.StatusFound)
-	})
+	}))
 
 	handler := checkAdminExists(mux)
 	handler = loggingMiddleware(handler)
@@ -363,10 +535,25 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	slog.Info("Server is starting", "addr", server.Addr)
+	go func() {
+		slog.Info("Server is starting", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
 
-	err = server.ListenAndServe()
-	if err != nil && err != http.ErrServerClosed {
-		slog.Error("Server failed to start", "error", err)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("Server is shutting down...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	} else {
+		slog.Info("Server exited cleanly")
 	}
 }

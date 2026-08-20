@@ -1,4 +1,4 @@
-domain: "" # MUST BE SPECIFIED, otherwise app will crash on launch
+domain: "localhost" # MUST BE SPECIFIED, otherwise app will crash on launch
 name: "Usermount"
 port: "3000"
 db_path: "./usermount.db"
@@ -7,4 +7,15 @@ smtp_port: "25"
 smtp_skip_verify: true
 from_email: "noreply@localhost"
 script_path: "./create_user.sh"
+# delete_script_path: "./delete_user.sh"
+# update_password_script_path: "./update_user_pass.sh"
 jwt_secret: "super-secret-key-change-me"
+# cookie_secure: true # Optional: defaults to true
+
+services:
+  mail:
+    - name: Mailbox
+    - goto: "URLHERE"
+  git:
+    - name: Forgejo
+    - goto: "URLHERE"

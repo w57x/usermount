@@ -3,7 +3,7 @@ Description=Usermount management service
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/usermount daemon --config-path=usermount_config.yaml
+ExecStart=/usr/local/bin/usermount --config-path=/home/runner/config.yaml
 
 User=runner
 WorkingDirectory=/home/runner

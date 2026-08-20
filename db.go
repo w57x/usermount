@@ -19,6 +19,19 @@ func initDB() error {
 		return err
 	}
 
+	db.SetMaxOpenConns(1)
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL;",
+		"PRAGMA busy_timeout=5000;",
+		"PRAGMA foreign_keys=ON;",
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return err
+		}
+	}
+
 	createTablesQuery := `
 	CREATE TABLE IF NOT EXISTS invites (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +60,30 @@ func hasAdmin() (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func createInitialAdmin(username, passwordHash string) (bool, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	var count int
+	err = tx.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'").Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, nil
+	}
+
+	_, err = tx.Exec("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')", username, passwordHash)
+	if err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
 }
 
 func listUsers() ([]User, error) {
@@ -156,5 +193,34 @@ func deleteUser(username string) error {
 
 func markInviteAsUnused(code string) error {
 	_, err := db.Exec("UPDATE invites SET used = 0 WHERE code = ?", code)
+	return err
+}
+
+func listInvites() ([]Invite, error) {
+	rows, err := db.Query("SELECT id, code, email, used, created_at FROM invites ORDER BY created_at DESC LIMIT 50")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var invites []Invite
+	for rows.Next() {
+		var inv Invite
+		err := rows.Scan(&inv.ID, &inv.Code, &inv.Email, &inv.Used, &inv.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		invites = append(invites, inv)
+	}
+	return invites, nil
+}
+
+func revokeInvite(code string) error {
+	_, err := db.Exec("DELETE FROM invites WHERE code = ?", code)
+	return err
+}
+
+func updateUserPassword(username, passwordHash string) error {
+	_, err := db.Exec("UPDATE users SET password_hash = ? WHERE username = ?", passwordHash, username)
 	return err
 }

@@ -1,23 +1,103 @@
 package views
 
-templ Home(username string) {
+type ServiceItem struct {
+	Key  string
+	Name string
+	Goto string
+	Icon string
+}
+
+templ Home(username string, services []ServiceItem) {
 	@Layout("Home") {
 		<div class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
 			<div class="flex justify-center">
 				<img src="/assets/usermount.svg" alt="usermount logo"/>
 			</div>
-			<div class="card p-6 bg-white space-y-6 text-center">
-				<div class="space-y-2">
+			<div class="card p-6 bg-white space-y-5">
+				<div class="space-y-2 text-center pb-3 border-b border-zinc-100">
 					<div class="mx-auto h-9 w-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
 						@Lucide("check-circle", "h-5 w-5")
 					</div>
-					<h1 class="text-lg font-semibold text-zinc-900">Welcome, { username }!</h1>
-					<p class="text-xs text-zinc-500 font-normal">Your account has been initialized and is ready.</p>
+					<div>
+						<h1 class="text-base font-semibold text-zinc-900">Welcome, { username }!</h1>
+						<p class="text-xs text-zinc-500 font-normal">Your account is active and configured.</p>
+					</div>
 				</div>
-				<div class="pt-4 border-t border-zinc-100">
-					<a href="/logout" class="btn-pure-outline w-full text-xs font-semibold">Sign Out</a>
+				if len(services) > 0 {
+					<div class="space-y-2.5">
+						<div class="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Connected Services</div>
+						<div class="grid grid-cols-1 gap-2">
+							for _, s := range services {
+								<a
+									href={ templ.SafeURL(s.Goto) }
+									target="_blank"
+									rel="noopener noreferrer"
+									class="flex items-center justify-between p-3 rounded-lg border border-zinc-200/80 bg-zinc-50/50 hover:bg-zinc-100 hover:border-zinc-300 transition-all duration-150 group"
+								>
+									<div class="flex items-center gap-3">
+										<div class="h-8 w-8 rounded-md bg-white border border-zinc-200 flex items-center justify-center text-zinc-700 shadow-xs group-hover:text-zinc-950 transition-colors">
+											@Lucide(s.Icon, "h-4 w-4")
+										</div>
+										<div class="space-y-0.5">
+											<div class="text-xs font-semibold text-zinc-900 group-hover:text-zinc-950">{ s.Name }</div>
+											<div class="text-[11px] text-zinc-400 font-mono truncate max-w-60">{ s.Goto }</div>
+										</div>
+									</div>
+									<div class="text-zinc-400 group-hover:text-zinc-600 group-hover:translate-x-0.5 transition-all">
+										@Lucide("external-link", "h-3.5 w-3.5")
+									</div>
+								</a>
+							}
+						</div>
+					</div>
+				}
+			</div>
+			<div class="card p-6 bg-white space-y-4">
+				<div class="space-y-1">
+					<h3 class="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+						@Lucide("key", "h-4 w-4 text-zinc-500")
+						Change Password
+					</h3>
+					<p class="text-xs text-zinc-500 font-normal">Update your account login password.</p>
 				</div>
+				<form hx-post="/api/user/change-password" hx-target="#password-result" class="space-y-3" hx-on::after-request="if(event.detail.successful) this.reset();">
+					<div class="space-y-1">
+						<label for="current_password" class="text-xs font-medium text-zinc-600">Current Password</label>
+						<input type="password" id="current_password" name="current_password" required class="input-pure text-sm" placeholder="••••••••"/>
+					</div>
+					<div class="space-y-1">
+						<label for="new_password" class="text-xs font-medium text-zinc-600">New Password</label>
+						<input type="password" id="new_password" name="new_password" required minlength="8" class="input-pure text-sm" placeholder="••••••••"/>
+					</div>
+					<button type="submit" class="btn-pure w-full text-xs font-semibold">Update Password</button>
+				</form>
+				<div id="password-result"></div>
+			</div>
+			<div class="pt-2">
+				<a href="/logout" class="btn-pure-outline w-full text-xs font-semibold block text-center">Sign Out</a>
 			</div>
 		</div>
 	}
+}
+
+templ PasswordChangeSuccess() {
+	<div class="p-3 bg-zinc-900 border border-zinc-800 text-zinc-50 rounded-lg text-xs space-y-1 animate-in fade-in duration-200">
+		<div class="flex items-center gap-1.5 text-emerald-400 font-medium">
+			@Lucide("check-circle", "h-3.5 w-3.5")
+			Password Updated!
+		</div>
+		<p class="text-[10px] text-zinc-400">Your password has been changed successfully.</p>
+	</div>
+}
+
+templ PasswordChangeError(msg string) {
+	<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs flex items-start gap-2 animate-in fade-in duration-200">
+		<div class="shrink-0 mt-0.5 text-red-500">
+			@Lucide("alert-triangle", "h-3.5 w-3.5")
+		</div>
+		<div class="space-y-0.5">
+			<p class="font-medium">Update Failed</p>
+			<p class="text-[10px] text-red-600">{ msg }</p>
+		</div>
+	</div>
 }

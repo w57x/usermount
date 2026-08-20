@@ -17,4 +17,7 @@ run: tidy wind
 	go tool templ generate && go run . --config-path=config.yaml
 
 build: wind
-	go tool templ generate && go build
+	go tool templ generate
+	go test -v ./...
+	go build
+
